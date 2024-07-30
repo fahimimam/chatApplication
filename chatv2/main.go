@@ -41,12 +41,14 @@ func init() {
 type CommandID string
 
 const (
-	CMD_NICKNAME CommandID = "/name"
-	CMD_ROOMS    CommandID = "/rooms"
-	CMD_JOIN     CommandID = "/join"
-	CMD_MSG      CommandID = "/msg"
-	CMD_QUIT     CommandID = "/quit"
+	CmdNickname CommandID = "/name"
+	CmdRooms    CommandID = "/rooms"
+	CmdJoin     CommandID = "/join"
+	CmdMsg      CommandID = "/msg"
+	CmdQuit     CommandID = "/quit"
 )
+
+const ChatRoomBufferSize = 5
 
 type Command struct {
 	ID     CommandID
@@ -139,15 +141,15 @@ func (s *Server) Run() {
 		}).Info("processing command")
 
 		switch cmd.ID {
-		case CMD_NICKNAME:
+		case CmdNickname:
 			s.NickName(cmd.Client, cmd.Args)
-		case CMD_ROOMS:
+		case CmdRooms:
 			s.ListRooms(cmd.Client, cmd.Args)
-		case CMD_JOIN:
+		case CmdJoin:
 			s.Join(cmd.Client, cmd.Args)
-		case CMD_MSG:
+		case CmdMsg:
 			s.Message(cmd.Client, cmd.Args)
-		case CMD_QUIT:
+		case CmdQuit:
 			s.Quit(cmd.Client, cmd.Args)
 		}
 	}
@@ -228,7 +230,7 @@ func (s *Server) Join(c *Client, args []string) {
 	roomName := args[1]
 	value, ok := s.Rooms.Load(roomName)
 	if !ok {
-		room := NewRoom(roomName, 100) // Buffer size of 100 messages
+		room := NewRoom(roomName, ChatRoomBufferSize)
 		s.Rooms.Store(roomName, room)
 		value = room
 	}
@@ -279,31 +281,31 @@ func (c *Client) ReadInput() {
 		switch cmd {
 		case "/name":
 			c.Commands <- Command{
-				ID:     CMD_NICKNAME,
+				ID:     CmdNickname,
 				Client: c,
 				Args:   args,
 			}
 		case "/rooms":
 			c.Commands <- Command{
-				ID:     CMD_ROOMS,
+				ID:     CmdRooms,
 				Client: c,
 				Args:   args,
 			}
 		case "/msg":
 			c.Commands <- Command{
-				ID:     CMD_MSG,
+				ID:     CmdMsg,
 				Client: c,
 				Args:   args,
 			}
 		case "/join":
 			c.Commands <- Command{
-				ID:     CMD_JOIN,
+				ID:     CmdJoin,
 				Client: c,
 				Args:   args,
 			}
 		case "/quit":
 			c.Commands <- Command{
-				ID:     CMD_QUIT,
+				ID:     CmdQuit,
 				Client: c,
 				Args:   args,
 			}
@@ -341,11 +343,10 @@ func main() {
 	}()
 
 	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			log.Println("Unable to accept connection ", err.Error())
+		conn, listeningErr := listener.Accept()
+		if listeningErr != nil {
+			log.Println("Unable to accept connection ", listeningErr.Error())
 		}
-
 		go s.NewClient(conn)
 	}
 }
