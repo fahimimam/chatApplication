@@ -16,6 +16,11 @@ import (
 
 var log = logrus.New()
 
+const (
+	PORT          = 3000
+	ServerMessage = "server"
+)
+
 var (
 	connectionsGauge = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "tcp_chat_connections",
@@ -31,7 +36,9 @@ var (
 )
 
 func init() {
-	log.SetFormatter(&logrus.TextFormatter{})
+	log.SetFormatter(&logrus.TextFormatter{
+		FullTimestamp: true,
+	})
 	log.SetOutput(os.Stdout)
 	log.SetLevel(logrus.InfoLevel)
 	prometheus.MustRegister(connectionsGauge)
@@ -41,12 +48,15 @@ func init() {
 type CommandID string
 
 const (
-	CMD_NICKNAME CommandID = "/name"
-	CMD_ROOMS    CommandID = "/rooms"
-	CMD_JOIN     CommandID = "/join"
-	CMD_MSG      CommandID = "/msg"
-	CMD_QUIT     CommandID = "/quit"
+	CmdNickname CommandID = "/name"
+	CmdRooms    CommandID = "/rooms"
+	CmdJoin     CommandID = "/join"
+	CmdMsg      CommandID = "/msg"
+	CmdQuit     CommandID = "/quit"
+	CmdLeave    CommandID = "/leave"
 )
+
+const ChatRoomBufferSize = 100
 
 type Command struct {
 	ID     CommandID
@@ -125,8 +135,45 @@ func (s *Server) NewClient(conn net.Conn) {
 		RateLimiter:  time.NewTicker(time.Second),
 		InitialTimer: time.NewTimer(time.Millisecond),
 	}
-
+	c.ShowMenu()
 	c.ReadInput()
+}
+
+var commandDescriptions = map[string]string{
+	"/join [room name]":  "Join a chat room",
+	"/rooms":             "List available chat rooms",
+	"/msg [message]":     "Send a message to the current room",
+	"/name [name]":       "Change your nickname",
+	"/leave [room name]": "Leave a room",
+	"/quit":              "Disconnect from the chat server",
+}
+
+func formatMenu() string {
+	var commands []string
+	var descriptions []string
+	maxCommandLength := 0
+
+	for cmd, desc := range commandDescriptions {
+		commands = append(commands, cmd)
+		descriptions = append(descriptions, desc)
+		if len(cmd) > maxCommandLength {
+			maxCommandLength = len(cmd)
+		}
+	}
+
+	menu := "Available commands:\n"
+	menu += fmt.Sprintf("%-*s | %s\n", maxCommandLength, "Command", "Description")
+	menu += fmt.Sprintf("%s-+-%s\n", strings.Repeat("-", maxCommandLength), strings.Repeat("-", 40))
+
+	for i := 0; i < len(commands); i++ {
+		menu += fmt.Sprintf("%-*s | %s\n", maxCommandLength, commands[i], descriptions[i])
+	}
+
+	return menu
+}
+func (c *Client) ShowMenu() {
+	menu := formatMenu()
+	c.Conn.Write([]byte(menu))
 }
 
 func (s *Server) Run() {
@@ -139,20 +186,32 @@ func (s *Server) Run() {
 		}).Info("processing command")
 
 		switch cmd.ID {
-		case CMD_NICKNAME:
+		case CmdNickname:
 			s.NickName(cmd.Client, cmd.Args)
-		case CMD_ROOMS:
+		case CmdRooms:
 			s.ListRooms(cmd.Client, cmd.Args)
-		case CMD_JOIN:
+		case CmdJoin:
 			s.Join(cmd.Client, cmd.Args)
-		case CMD_MSG:
+		case CmdMsg:
 			s.Message(cmd.Client, cmd.Args)
-		case CMD_QUIT:
+		case CmdQuit:
 			s.Quit(cmd.Client, cmd.Args)
+		case CmdLeave:
+			s.leaveRoom(cmd.Client, cmd.Args)
 		}
 	}
 }
-
+func (s *Server) leaveRoom(client *Client, args []string) {
+	if client.Room != nil {
+		client.Conn.Write([]byte("You have left " + client.Room.Name + ".\n"))
+		room := s.GetRoomOfClient(client)
+		room.Clients.Delete(client.Conn)
+		client.Room = nil
+		s.broadcastMessage(room, client, fmt.Sprintf("%s has left the room.", client.NickName), false)
+	} else {
+		client.Conn.Write([]byte("You are not in any room\n"))
+	}
+}
 func (s *Server) ListRooms(c *Client, args []string) {
 	var roomNames []string
 	s.Rooms.Range(func(key, value interface{}) bool {
@@ -191,32 +250,58 @@ func (s *Server) NickName(c *Client, args []string) {
 }
 
 func (s *Server) Message(c *Client, args []string) {
-	if len(args) < 2 {
-		c.Error(fmt.Errorf("message is required. usage: /msg ROOM MESSAGE"))
+	msg := strings.Join(args[1:], " ")
+	if c.Room == nil {
+		c.Error(fmt.Errorf("must join a room"))
 		return
 	}
 
-	roomName := args[1]
-	msg := strings.Join(args[2:], " ")
-
-	value, ok := s.Rooms.Load(roomName)
-	if !ok {
-		c.Error(fmt.Errorf("room not found"))
+	room := s.GetRoomOfClient(c)
+	if room == nil {
+		c.Error(fmt.Errorf("error retrieving room"))
 		return
 	}
-
-	room := value.(*Room)
-	formattedMsg := fmt.Sprintf("%s: %s", c.NickName, msg)
-	room.Messages.Add(formattedMsg)
-	s.broadcastMessage(room, formattedMsg)
+	//formattedMsg := fmt.Sprintf("%s > %s: %s", room.Name, c.NickName, msg)
+	//formattedMsg := formatMessage(c.NickName, msg)
+	//room.Messages.Add(formattedMsg)
+	s.broadcastMessage(room, c, msg, false)
 }
 
-func (s *Server) broadcastMessage(room *Room, msg string) {
+func (s *Server) GetRoomOfClient(c *Client) *Room {
+	value, ok := s.Rooms.Load(c.Room.Name)
+	if !ok {
+		c.Error(fmt.Errorf("room not found"))
+		return nil
+	}
+
+	return value.(*Room)
+}
+
+func (s *Server) broadcastMessage(room *Room, sender *Client, msg string, isServer bool) {
+	timestamp := time.Now().Format("15:04:05")
+	room.Messages.Add(fmt.Sprintf("\033[34m[%s] [%s] %s: %s\033[0m", timestamp, room.Name, sender.NickName, msg))
 	room.Clients.Range(func(key, value interface{}) bool {
 		client := value.(*Client)
-		client.Conn.Write([]byte(msg + "\n"))
+		var formattedMsg string
+		if isServer {
+			formattedMsg = s.formatMessage(sender.NickName, msg, timestamp, room.Name, false, isServer)
+		} else if client == sender {
+			formattedMsg = s.formatMessage(sender.NickName, msg, timestamp, room.Name, true, isServer)
+		} else {
+			formattedMsg = s.formatMessage(sender.NickName, msg, timestamp, room.Name, false, isServer)
+		}
+		client.Conn.Write([]byte(formattedMsg + "\n"))
 		return true
 	})
+}
+func (s *Server) formatMessage(username, message, timestamp, roomName string, isSelf, isServer bool) string {
+	if isServer {
+		return fmt.Sprintf("\033[45m[%s] %s: %s\033[0m", timestamp, roomName, message) // Magenta for system messages
+	}
+	if isSelf {
+		return fmt.Sprintf("\033[32m[%s] [%s] You: %s\033[0m", timestamp, roomName, message)
+	}
+	return fmt.Sprintf("\033[34m[%s] [%s] %s: %s\033[0m", timestamp, roomName, username, message) // Blue for others
 }
 
 func (s *Server) Join(c *Client, args []string) {
@@ -224,11 +309,11 @@ func (s *Server) Join(c *Client, args []string) {
 		c.Error(fmt.Errorf("room name is required. usage: /join ROOM"))
 		return
 	}
-
+	s.leaveRoom(c, args)
 	roomName := args[1]
 	value, ok := s.Rooms.Load(roomName)
 	if !ok {
-		room := NewRoom(roomName, 100) // Buffer size of 100 messages
+		room := NewRoom(roomName, ChatRoomBufferSize)
 		s.Rooms.Store(roomName, room)
 		value = room
 	}
@@ -241,13 +326,17 @@ func (s *Server) Join(c *Client, args []string) {
 		c.Conn.Write([]byte(msg + "\n"))
 	}
 
-	s.broadcastMessage(room, fmt.Sprintf("%s joined the room", c.NickName))
+	s.broadcastMessage(room, c, fmt.Sprintf("%s joined the room", c.NickName), true)
 }
 
+//	func (s *Server) removeClient(client *Client) {
+//		client.Conn.Write([]byte("You have left " + "\n"))
+//		s.broadcastMessage(client.Room, fmt.Sprintf("%s has left the room\n", client.NickName))
+//	}
 func (s *Server) Quit(c *Client, args []string) {
 	if c.Room != nil {
 		c.Room.Clients.Delete(c.Conn)
-		s.broadcastMessage(c.Room, fmt.Sprintf("%s left the room", c.NickName))
+		s.broadcastMessage(c.Room, c, fmt.Sprintf("%s left the room", c.NickName), true)
 		c.Room = nil
 	}
 	c.Conn.Close()
@@ -274,47 +363,51 @@ func (c *Client) ReadInput() {
 		}
 		msg = strings.Trim(msg, "\r\n")
 		args := strings.Split(msg, " ")
-		cmd := strings.TrimSpace(args[0])
-
-		switch cmd {
-		case "/name":
-			c.Commands <- Command{
-				ID:     CMD_NICKNAME,
-				Client: c,
-				Args:   args,
-			}
-		case "/rooms":
-			c.Commands <- Command{
-				ID:     CMD_ROOMS,
-				Client: c,
-				Args:   args,
-			}
-		case "/msg":
-			c.Commands <- Command{
-				ID:     CMD_MSG,
-				Client: c,
-				Args:   args,
-			}
-		case "/join":
-			c.Commands <- Command{
-				ID:     CMD_JOIN,
-				Client: c,
-				Args:   args,
-			}
-		case "/quit":
-			c.Commands <- Command{
-				ID:     CMD_QUIT,
-				Client: c,
-				Args:   args,
-			}
-		default:
-			c.Error(fmt.Errorf("unknown command: %s", cmd))
-		}
+		go c.processMessage(args)
 	}
 }
 
-func (c *Client) processMessage() {
-
+func (c *Client) processMessage(args []string) {
+	switch args[0] {
+	case "/name":
+		c.Commands <- Command{
+			ID:     CmdNickname,
+			Client: c,
+			Args:   args,
+		}
+	case "/rooms":
+		c.Commands <- Command{
+			ID:     CmdRooms,
+			Client: c,
+			Args:   args,
+		}
+	case "/msg":
+		c.Commands <- Command{
+			ID:     CmdMsg,
+			Client: c,
+			Args:   args,
+		}
+	case "/join":
+		c.Commands <- Command{
+			ID:     CmdJoin,
+			Client: c,
+			Args:   args,
+		}
+	case "/quit":
+		c.Commands <- Command{
+			ID:     CmdQuit,
+			Client: c,
+			Args:   args,
+		}
+	case "/leave":
+		c.Commands <- Command{
+			ID:     CmdLeave,
+			Client: c,
+			Args:   args,
+		}
+	default:
+		c.Error(fmt.Errorf("unknown command: %s", args[0]))
+	}
 }
 
 func (c *Client) Error(err error) {
@@ -327,13 +420,12 @@ func main() {
 	}
 	go s.Run()
 
-	port := 3000
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%v", port))
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%v", PORT))
 	if err != nil {
 		log.Fatal("unable to start the server ", err.Error())
 	}
 	defer listener.Close()
-	log.Println("Started server on: ", port)
+	log.Println("Started server on: ", PORT)
 
 	http.Handle("/metrics", promhttp.Handler())
 	go func() {
@@ -341,11 +433,10 @@ func main() {
 	}()
 
 	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			log.Println("Unable to accept connection ", err.Error())
+		conn, listeningErr := listener.Accept()
+		if listeningErr != nil {
+			log.Println("Unable to accept connection ", listeningErr.Error())
 		}
-
 		go s.NewClient(conn)
 	}
 }
