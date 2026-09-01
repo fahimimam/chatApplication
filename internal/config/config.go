@@ -7,9 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"time"
+
+	"github.com/fahimimam/chatApplication/internal/logger"
 )
 
 // Config is the runtime configuration for a process.
@@ -76,18 +77,18 @@ func getenv(key, def string) string {
 }
 
 // ParseLevel converts a string log level into a logger.Level.
-func ParseLevel(s string) int {
+func ParseLevel(s string) logger.Level {
 	switch strings.ToLower(s) {
 	case "debug":
-		return 0
+		return logger.LevelDebug
 	case "info":
-		return 1
+		return logger.LevelInfo
 	case "warn":
-		return 2
+		return logger.LevelWarn
 	case "error":
-		return 3
+		return logger.LevelError
 	}
-	return 1
+	return logger.LevelInfo
 }
 
 // FormatDuration renders a duration in a human-readable short form.
@@ -95,5 +96,5 @@ func FormatDuration(d time.Duration) string {
 	if d <= 0 {
 		return "0s"
 	}
-	return strconv.FormatInt(int64(d.Seconds()), 10) + "s"
+	return d.String()
 }

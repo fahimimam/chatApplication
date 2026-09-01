@@ -206,12 +206,14 @@ func TestSessionRepo(t *testing.T) {
 		t.Fatalf("expected not found after delete, got %v", err)
 	}
 
-	// Expired sessions are rejected.
+	// Expired sessions still resolve at the repository level — the auth
+	// service is responsible for checking expiry with its own clock.
 	expired := domain.SessionToken("tok-2")
 	if err := r.Sessions.Create(ctx, expired, "u1", time.Now().Add(-time.Hour)); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := r.Sessions.UserForToken(ctx, expired); !errors.Is(err, domain.ErrNotFound) {
-		t.Fatalf("expected not found for expired, got %v", err)
+	uid2, _, err := r.Sessions.UserForToken(ctx, expired)
+	if err != nil || uid2 != "u1" {
+		t.Fatalf("repo should not enforce expiry: %v %v", err, uid2)
 	}
 }

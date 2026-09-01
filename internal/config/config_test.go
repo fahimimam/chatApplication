@@ -4,6 +4,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/fahimimam/chatApplication/internal/logger"
 )
 
 func TestFromEnvAppliesDefaults(t *testing.T) {
@@ -39,7 +41,7 @@ func TestValidateRejectsBadLogLevel(t *testing.T) {
 }
 
 func TestParseLevel(t *testing.T) {
-	cases := map[string]int{"debug": 0, "INFO": 1, "Warn": 2, "error": 3}
+	cases := map[string]logger.Level{"debug": logger.LevelDebug, "INFO": logger.LevelInfo, "Warn": logger.LevelWarn, "error": logger.LevelError}
 	for in, want := range cases {
 		if got := ParseLevel(in); got != want {
 			t.Fatalf("%s -> %d, want %d", in, got, want)

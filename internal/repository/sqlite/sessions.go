@@ -23,7 +23,9 @@ func (r *SessionRepo) Create(ctx context.Context, token domain.SessionToken, use
 }
 
 // UserForToken resolves a token to a (user, expiry) pair or returns
-// domain.ErrNotFound when invalid/expired.
+// domain.ErrNotFound when the token does not exist. Expiration is NOT
+// checked here — callers (the auth service) decide policy using their own
+// clock so test code can use a frozen clock.
 func (r *SessionRepo) UserForToken(ctx context.Context, token domain.SessionToken) (domain.UserID, time.Time, error) {
 	var (
 		uid       string
@@ -38,11 +40,7 @@ func (r *SessionRepo) UserForToken(ctx context.Context, token domain.SessionToke
 		}
 		return "", time.Time{}, err
 	}
-	exp := unixToTime(expiresMs)
-	if !exp.IsZero() && exp.Before(time.Now()) {
-		return "", time.Time{}, domain.ErrNotFound
-	}
-	return domain.UserID(uid), exp, nil
+	return domain.UserID(uid), unixToTime(expiresMs), nil
 }
 
 // Delete removes a session.
