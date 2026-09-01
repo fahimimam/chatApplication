@@ -1,0 +1,17 @@
+# Go build/test artefacts
+/chatd
+/chattui
+*.test
+*.out
+
+# Local SQLite databases
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Editor / IDE
+.idea/
+
+# OS
+.DS_Store
