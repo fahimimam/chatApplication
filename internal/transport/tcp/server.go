@@ -22,11 +22,11 @@ import (
 // and runs each connection in its own goroutine. All business logic is
 // delegated to the application services.
 type Server struct {
-	auth     *application.AuthService
-	convs    *application.ConversationService
-	msgs     *application.MessageService
-	users    repository.UserRepository
-	log      *logger.Logger
+	auth  *application.AuthService
+	convs *application.ConversationService
+	msgs  *application.MessageService
+	users repository.UserRepository
+	log   *logger.Logger
 
 	// Hook is invoked whenever a successful message is sent through
 	// SendMessage. The transport uses it to fan out realtime notifications
@@ -77,6 +77,7 @@ type session struct {
 	user   *domain.User
 	token  domain.SessionToken
 	server *Server
+	reqID  string // correlation id from the current command, if any
 }
 
 func (s *Server) handle(ctx context.Context, conn net.Conn) {
@@ -104,6 +105,16 @@ func (s *Server) handle(ctx context.Context, conn net.Conn) {
 		}
 		if comment {
 			continue
+		}
+		// Optional correlation id "id <n> <verb> ..." — used by the
+		// in-process client to multiplex requests. We strip it; the
+		// server doesn't need it.
+		if verb == "id" && len(args) >= 2 {
+			sess.reqID = args[0]
+			verb = args[1]
+			args = args[2:]
+		} else {
+			sess.reqID = ""
 		}
 		s.dispatch(ctx, sess, verb, args)
 		if sess.server.shouldClose(verb) {
@@ -241,13 +252,16 @@ func (s *Server) cmdHistory(ctx context.Context, sess *session, args []string) {
 		ConversationID: domain.ConversationID(args[0]),
 		CallerID:       sess.user.ID,
 	}
+	// before_ms <= 0 means "start from newest".
 	if len(args) >= 2 {
 		ms, err := strconv.ParseInt(args[1], 10, 64)
 		if err != nil {
 			sess.errorf("bad before_ms: %s", err.Error())
 			return
 		}
-		in.Before = time.UnixMilli(ms).UTC()
+		if ms > 0 {
+			in.Before = time.UnixMilli(ms).UTC()
+		}
 	}
 	if len(args) >= 3 {
 		lim, err := strconv.Atoi(args[2])
@@ -319,9 +333,16 @@ func (sess *session) errorf(format string, args ...any) {
 	sess.writeLine(PrefixERR, fmt.Sprintf(format, args...))
 }
 
+// writeLine prefixes the line with an optional correlation id so the
+// in-process client can route the response back to the right caller.
 func (sess *session) writeLine(prefix, body string) {
 	sess.wmu.Lock()
 	defer sess.wmu.Unlock()
+	if sess.reqID != "" {
+		_, _ = sess.w.WriteString("id ")
+		_, _ = sess.w.WriteString(sess.reqID)
+		_ = sess.w.WriteByte(' ')
+	}
 	_, _ = sess.w.WriteString(prefix)
 	_, _ = sess.w.WriteString(body)
 	_ = sess.w.WriteByte('\n')

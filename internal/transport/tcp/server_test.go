@@ -38,7 +38,8 @@ func testServer(t *testing.T) (addr string, closer func()) {
 	conv := application.NewConversationService(repos.Conversations, repos.Users, clock)
 	msg := application.NewMessageService(repos.Messages, repos.Conversations, repos.Users, clock)
 
-	srv := NewServer(auth, conv, msg, repos.Users, logger.Discard())
+	log := logger.Discard()
+	srv := NewServer(auth, conv, msg, repos.Users, log)
 
 	// Listen on a free port.
 	l, err := net.Listen("tcp", "127.0.0.1:0")

@@ -96,7 +96,11 @@ func (s *MessageService) History(ctx context.Context, in HistoryInput) ([]domain
 	if !ok {
 		return nil, fmt.Errorf("%w: cannot read %s", domain.ErrForbidden, in.ConversationID)
 	}
-	return s.msgs.ListByConversation(ctx, in.ConversationID, in.Before, in.Limit)
+	out, err := s.msgs.ListByConversation(ctx, in.ConversationID, in.Before, in.Limit)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // ByID fetches a single message by id, enforcing membership.
