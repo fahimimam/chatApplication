@@ -8,14 +8,15 @@ import (
 
 func (m *Model) viewLogin() string {
 	var b strings.Builder
-	title := titleStyle.Render("chatd login")
+	title := titleStyle.Render("chatd")
 	b.WriteString(title + "\n\n")
 
 	mode := "login"
 	if m.authMode == ModeRegister {
-		mode = "register"
+		mode = "register (creating a new account)"
 	}
-	b.WriteString(dimStyle.Render(fmt.Sprintf("mode: %s   (ctrl+r to switch)", mode)) + "\n\n")
+	b.WriteString(dimStyle.Render(fmt.Sprintf("mode: %s", mode)) + "\n")
+	b.WriteString(dimStyle.Render("press ctrl+r to switch between login and register") + "\n\n")
 	b.WriteString(m.username.View() + "\n")
 	b.WriteString(m.password.View() + "\n\n")
 	if m.status != "" {
@@ -26,7 +27,7 @@ func (m *Model) viewLogin() string {
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString(helpStyle.Render("tab: switch field   enter: submit   ctrl+c: quit"))
+	b.WriteString(helpStyle.Render("tab: switch field   enter: submit   ctrl+r: login/register   ctrl+c: quit"))
 	return b.String()
 }
 

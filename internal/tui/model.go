@@ -138,8 +138,16 @@ type authedMsg struct {
 	username string
 }
 
-func loadConvs(ctx context.Context, c *tcp.Client) tea.Cmd {
+// openConversationMsg tells the model to transition to the chat view for
+// a freshly-opened conversation and load its history.
+type openConversationMsg struct {
+	conv ConvSummary
+}
+
+func loadConvs(c *tcp.Client) tea.Cmd {
 	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 		raw, err := c.ListConversations(ctx)
 		if err != nil {
 			return errMsg{err}
@@ -159,8 +167,10 @@ func loadConvs(ctx context.Context, c *tcp.Client) tea.Cmd {
 	}
 }
 
-func loadHistory(ctx context.Context, c *tcp.Client, conv domain.ConversationID) tea.Cmd {
+func loadHistory(c *tcp.Client, conv domain.ConversationID) tea.Cmd {
 	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 		raw, err := c.History(ctx, string(conv), 0, 100)
 		if err != nil {
 			return errMsg{err}
@@ -196,13 +206,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.user.Username = msg.username
 		m.view = ViewConvs
 		m.loading = true
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		return m, loadConvs(ctx, m.client)
+		return m, loadConvs(m.client)
 	case convsLoadedMsg:
 		m.loading = false
 		m.convs = msg.items
 		return m, nil
+	case openConversationMsg:
+		cs := msg.conv
+		m.current = &cs
+		m.messages = nil
+		m.input.Placeholder = "type a message and press Enter"
+		m.view = ViewChat
+		m.status = fmt.Sprintf("opened conversation with %s", cs.Title)
+		m.statusErr = false
+		return m, loadHistory(m.client, cs.ID)
 	case messagesLoadedMsg:
 		if m.current != nil && m.current.ID == msg.conv {
 			m.messages = msg.msgs
@@ -210,7 +227,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case errMsg:
-		m.status = msg.err.Error()
+		errStr := msg.err.Error()
+		// Friendly hint: "invalid credential" usually means the user
+		// hasn't registered yet. Suggest switching to register.
+		if strings.Contains(errStr, "invalid credential") && m.authMode == ModeLogin {
+			errStr += "  — tip: press ctrl+r to switch to register"
+		}
+		m.status = errStr
 		m.statusErr = true
 		m.loading = false
 		return m, nil
@@ -273,10 +296,14 @@ func (m *Model) submitAuth() (tea.Model, tea.Cmd) {
 	}
 	m.status = ""
 	m.statusErr = false
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 	mode := m.authMode
 	return m, func() tea.Msg {
+		// Per-command context with timeout. The lifetime matches this
+		// closure, not the calling Update — otherwise the deferred
+		// cancel() in the caller would cancel ctx before the closure
+		// even runs.
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 		var err error
 		if mode == ModeRegister {
 			err = m.client.Register(ctx, u, p, u)
@@ -308,9 +335,7 @@ func (m *Model) handleConvsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.current = &cs
 		m.view = ViewChat
 		m.input.Focus()
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		return m, loadHistory(ctx, m.client, cs.ID)
+		return m, loadHistory(m.client, cs.ID)
 	case "n":
 		// Open conversation with arbitrary user via a prompt. For the
 		// initial cut we use a small inline prompt by toggling view.
@@ -322,9 +347,7 @@ func (m *Model) handleConvsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.input.SetValue("")
 	case "r":
 		// Refresh conversation list.
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		return m, loadConvs(ctx, m.client)
+		return m, loadConvs(m.client)
 	case "ctrl+c", "esc":
 		m.quitting = true
 		return m, tea.Quit
@@ -367,21 +390,23 @@ func (m *Model) submitChatLine() (tea.Model, tea.Cmd) {
 			m.statusErr = true
 			return m, nil
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		convID, err := m.client.OpenConversation(ctx, username)
-		if err != nil {
-			m.status = err.Error()
-			m.statusErr = true
-			return m, nil
+		// Run synchronously inside the cmd so the response is available
+		// before we transition views.
+		return m, func() tea.Msg {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			convID, err := m.client.OpenConversation(ctx, username)
+			if err != nil {
+				return errMsg{err}
+			}
+			return openConversationMsg{
+				conv: ConvSummary{
+					ID:    domain.ConversationID(convID),
+					Kind:  domain.KindDirect,
+					Title: username,
+				},
+			}
 		}
-		cs := ConvSummary{ID: domain.ConversationID(convID), Kind: domain.KindDirect, Title: username}
-		m.current = &cs
-		m.messages = nil
-		m.input.Placeholder = "type a message and press Enter"
-		m.status = fmt.Sprintf("opened conversation with %s", username)
-		m.statusErr = false
-		return m, loadHistory(ctx, m.client, cs.ID)
 	case strings.HasPrefix(line, "/quit"), line == "/exit":
 		m.quitting = true
 		return m, tea.Quit
@@ -397,16 +422,32 @@ func (m *Model) submitChatLine() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 	convID := m.current.ID
 	body := line
 	return m, func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 		_, err := m.client.Send(ctx, string(convID), body)
 		if err != nil {
 			return errMsg{err}
 		}
-		return loadHistory(ctx, m.client, convID)()
+		// Refresh history after a successful send.
+		raw, herr := m.client.History(ctx, string(convID), 0, 100)
+		if herr != nil {
+			return errMsg{herr}
+		}
+		var msgs []MessageRow
+		for _, ln := range raw {
+			if IsEndLine(ln) {
+				continue
+			}
+			mr, perr := ParseMessage(ln)
+			if perr != nil {
+				continue
+			}
+			msgs = append(msgs, mr)
+		}
+		return messagesLoadedMsg{conv: convID, msgs: msgs}
 	}
 }
 
