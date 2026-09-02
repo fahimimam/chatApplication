@@ -63,6 +63,14 @@ func Dial(addr string) (*Client, error) {
 		_ = conn.Close()
 		return nil, fmt.Errorf("%s", strings.TrimPrefix(welcome, PrefixERR))
 	}
+	// Clear the read deadline so subsequent reads are bounded only by
+	// the per-call context, not by the 5s we used for the welcome read.
+	// Without this, any command sent more than 5s after Dial would time
+	// out because the underlying conn still has the stale deadline.
+	if err := conn.SetReadDeadline(time.Time{}); err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("clear read deadline: %w", err)
+	}
 	go c.readLoop()
 	_ = welcome
 	return c, nil
