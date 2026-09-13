@@ -88,18 +88,29 @@ id 3 OK sent id=<uuid> ts=<ms>
 
 Commands the server understands:
 
-| Verb      | Args                                  | Notes                        |
-|-----------|---------------------------------------|------------------------------|
-| `register`| `<user> <pass> [display]`             | creates account              |
-| `login`   | `<user> <pass>`                       | binds session to connection  |
-| `logout`  | —                                     |                              |
-| `ping`    | —                                     | `OK pong`                    |
-| `whoami`  | —                                     | `OK user id=… username=…`    |
-| `open`    | `<user>`                              | `OK conv id=<uuid> kind=…`   |
-| `list`    | —                                     | `OK conv …` × N, `OK (N)`    |
-| `send`    | `<conv> <message…>`                   | `OK sent id=<uuid> ts=…`     |
-| `history` | `<conv> [before_ms] [limit]`          | `OK msg …` × N, `OK end (N)` |
-| `quit`    | —                                     | `BYE bye`                    |
+| Verb           | Args                                  | Notes                                |
+|----------------|---------------------------------------|--------------------------------------|
+| `register`     | `<user> <pass> [display]`             | creates account                      |
+| `login`        | `<user> <pass>`                       | binds session to connection          |
+| `logout`       | —                                     |                                      |
+| `ping`         | —                                     | `OK pong`                            |
+| `whoami`       | —                                     | `OK user id=… username=…`            |
+| `who`          | —                                     | online users: `OK online …` × N      |
+| `users`        | `[filter]`                            | user directory (substring match)     |
+| `subscribe`    | —                                     | start receiving `EVT` messages       |
+| `unsubscribe`  | —                                     | stop receiving `EVT` messages        |
+| `open`         | `<user>`                              | `OK conv id=<uuid> kind=… title=…`   |
+| `list`         | —                                     | `OK conv …` × N, `OK (N)`            |
+| `send`         | `<conv> <message…>`                   | `OK sent id=<uuid> ts=…`             |
+| `history`      | `<conv> [before_ms] [limit]`          | `OK msg …` × N, `OK end (N)`         |
+| `quit`         | —                                     | `BYE bye`                            |
+
+Server-pushed events (delivered after `subscribe`, prefixed with `EVT `):
+
+| Event              | Body                                              |
+|--------------------|---------------------------------------------------|
+| `EVT msg …`        | new message in a conversation you're in           |
+| `EVT presence …`   | a user came online (`online=1`) or went offline    |
 
 ## Tests
 

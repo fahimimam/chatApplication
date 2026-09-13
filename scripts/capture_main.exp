@@ -1,0 +1,56 @@
+#!/usr/bin/expect -f
+# Capture the modernized login + main screens of chattui.
+set timeout 15
+log_user 1
+
+# 1. Login screen
+spawn /Users/pathaoltd/go/src/github.com/fahimimam/chatApplication/chattui -addr 127.0.0.1:17171
+set width 100
+set height 32
+
+# Resize the pty to fit the layout (skip if no controlling tty).
+catch { stty rows $height cols $width }
+
+expect {
+    -re "mode: login" { }
+    timeout { puts "login timeout"; exit 1 }
+}
+sleep 1
+
+# Switch to register mode and register a new user.
+send "\022r"
+expect {
+    -re "register \(creating a new account\)" { }
+    timeout { puts "register toggle timeout"; exit 1 }
+}
+
+send "alice\tpassword123\r"
+expect {
+    -re "Conversations" { }
+    timeout { puts "post-register timeout"; exit 1 }
+}
+
+# We're on the main view, logged in.
+sleep 1
+# Focus chat pane.
+send "\t"
+sleep 0.3
+send "hello bob!"
+send "\r"
+sleep 1
+
+# Open new-chat overlay.
+send "n"
+sleep 0.5
+send "bob"
+sleep 0.5
+send "\033"
+sleep 0.5
+
+# Help overlay.
+send "?"
+sleep 1
+
+sleep 1
+send "\003"
+expect eof

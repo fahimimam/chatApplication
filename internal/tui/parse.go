@@ -23,11 +23,12 @@ type ConvSummary struct {
 
 // MessageRow is one history entry, ready to render.
 type MessageRow struct {
-	ID        domain.MessageID
+	ID             domain.MessageID
 	ConversationID domain.ConversationID
-	Sender    domain.UserID
-	Content   string
-	CreatedAt time.Time
+	Sender         domain.UserID
+	SenderName     string
+	Content        string
+	CreatedAt      time.Time
 }
 
 // ParseConv parses "conv id=<uuid> kind=<direct|group> title=<text>".
@@ -52,16 +53,15 @@ func ParseConv(line string) (ConvSummary, error) {
 	return c, nil
 }
 
-// ParseMessage parses "msg id=<uuid> sender=<uuid> ts=<ms> content=<quoted>".
+// ParseMessage parses "msg id=<uuid> sender=<uuid> sender_name=<u> ts=<ms> content=<quoted>".
+// The fields may appear in any order and trailing fields (e.g. "conv=")
+// may be present. content= is the trailing quoted string.
 func ParseMessage(line string) (MessageRow, error) {
 	if !strings.HasPrefix(line, "msg ") {
 		return MessageRow{}, fmt.Errorf("not a msg line: %q", line)
 	}
 	rest := strings.TrimPrefix(line, "msg ")
 	// content= may contain spaces; it is the trailing quoted string.
-	// Find the first occurrence of " content=" that appears after the
-	// timestamp field. Easiest: split the known first three fields, then
-	// the rest is the content.
 	parts := strings.SplitN(rest, " content=", 2)
 	if len(parts) != 2 {
 		return MessageRow{}, fmt.Errorf("msg line missing content: %q", line)
@@ -71,16 +71,31 @@ func ParseMessage(line string) (MessageRow, error) {
 		return MessageRow{}, fmt.Errorf("msg line malformed head: %q", line)
 	}
 	content := strings.Trim(parts[1], `"`)
-	ts, err := strconv.ParseInt(strings.TrimPrefix(head[2], "ts="), 10, 64)
-	if err != nil {
-		return MessageRow{}, fmt.Errorf("msg line bad ts: %w", err)
+	mr := MessageRow{
+		Content: content,
 	}
-	return MessageRow{
-		ID:        domain.MessageID(strings.TrimPrefix(head[0], "id=")),
-		Sender:    domain.UserID(strings.TrimPrefix(head[1], "sender=")),
-		Content:   content,
-		CreatedAt: time.UnixMilli(ts).UTC(),
-	}, nil
+	for _, h := range head {
+		switch {
+		case strings.HasPrefix(h, "id="):
+			mr.ID = domain.MessageID(strings.TrimPrefix(h, "id="))
+		case strings.HasPrefix(h, "sender="):
+			mr.Sender = domain.UserID(strings.TrimPrefix(h, "sender="))
+		case strings.HasPrefix(h, "sender_name="):
+			mr.SenderName = strings.TrimPrefix(h, "sender_name=")
+		case strings.HasPrefix(h, "conv="):
+			mr.ConversationID = domain.ConversationID(strings.TrimPrefix(h, "conv="))
+		case strings.HasPrefix(h, "ts="):
+			ts, err := strconv.ParseInt(strings.TrimPrefix(h, "ts="), 10, 64)
+			if err != nil {
+				return MessageRow{}, fmt.Errorf("msg line bad ts: %w", err)
+			}
+			mr.CreatedAt = time.UnixMilli(ts).UTC()
+		}
+	}
+	if mr.ID == "" || mr.CreatedAt.IsZero() {
+		return MessageRow{}, fmt.Errorf("msg line missing required fields: %q", line)
+	}
+	return mr, nil
 }
 
 // IsEndLine returns true if the line is the terminal marker for a multi-
@@ -100,5 +115,8 @@ func ExtractCount(line string) int {
 }
 
 func fieldsAfter(s, prefix string) []string {
-	return strings.Fields(strings.TrimPrefix(s, prefix))
+	if prefix != "" {
+		s = strings.TrimPrefix(s, prefix)
+	}
+	return strings.Fields(s)
 }

@@ -150,6 +150,29 @@ func (c *Client) History(ctx context.Context, convID string, beforeUnixMilli int
 		fmt.Sprintf("%d", limit))
 }
 
+// Who returns the users currently connected to the server. Each line is a
+// plain "online id=... username=... display=... conn=N".
+func (c *Client) Who(ctx context.Context) ([]string, error) {
+	return c.collectOK(ctx, CmdWho)
+}
+
+// Subscribe enables server-pushed EVT messages on this connection. After
+// this call, Events() may deliver "msg ..." and "presence ..." lines. The
+// server does not push events until the client opts in.
+func (c *Client) Subscribe(ctx context.Context) error { return c.simple(ctx, CmdSubscribe) }
+
+// Unsubscribe disables server-pushed EVT messages on this connection.
+func (c *Client) Unsubscribe(ctx context.Context) error { return c.simple(ctx, CmdUnsub) }
+
+// Users returns the full user directory, optionally filtered by a
+// case-insensitive substring.
+func (c *Client) Users(ctx context.Context, filter string) ([]string, error) {
+	if filter == "" {
+		return c.collectOK(ctx, CmdUsers)
+	}
+	return c.collectOK(ctx, CmdUsers, filter)
+}
+
 // Send posts a message and returns the assigned message id.
 func (c *Client) Send(ctx context.Context, convID, content string) (string, error) {
 	lines, err := c.collectOK(ctx, CmdSend, convID, content)
@@ -262,6 +285,18 @@ func isTerminal(verb, line string) bool {
 		return true
 	}
 	if verb == CmdSend && strings.HasPrefix(line, "sent id=") {
+		return true
+	}
+	if verb == CmdWho && strings.HasPrefix(line, "(") && strings.HasSuffix(line, ")") {
+		return true
+	}
+	if verb == CmdUsers && strings.HasPrefix(line, "(") && strings.HasSuffix(line, ")") {
+		return true
+	}
+	if verb == CmdSubscribe && line == "subscribed" {
+		return true
+	}
+	if verb == CmdUnsub && line == "unsubscribed" {
 		return true
 	}
 	return false

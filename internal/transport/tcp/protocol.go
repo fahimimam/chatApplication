@@ -27,6 +27,10 @@ const (
 	CmdHistory   = "history"    // history <conv_id> [before_ms] [limit]
 	CmdSend      = "send"       // send <conv_id> <message...>
 	CmdWhoami    = "whoami"     // returns current user (auth probe)
+	CmdWho       = "who"        // returns online users
+	CmdUsers     = "users"      // returns known users (search <substring>)
+	CmdSubscribe = "subscribe"  // subscribe to realtime events for the user
+	CmdUnsub     = "unsubscribe"
 	CmdPing      = "ping"       // keepalive
 	CmdQuit      = "quit"
 )

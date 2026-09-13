@@ -35,6 +35,29 @@ func (r *UserRepo) ByUsername(ctx context.Context, username string) (domain.User
 		username)
 }
 
+// ListAll returns every user, sorted by username.
+func (r *UserRepo) ListAll(ctx context.Context) ([]domain.User, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, username, display_name, password_hash, created_at FROM users ORDER BY username COLLATE NOCASE`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.User
+	for rows.Next() {
+		var (
+			u         domain.User
+			createdMs int64
+		)
+		if err := rows.Scan(&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash, &createdMs); err != nil {
+			return nil, err
+		}
+		u.CreatedAt = unixToTime(createdMs)
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
 func (r *UserRepo) queryOne(ctx context.Context, q string, args ...any) (domain.User, error) {
 	var (
 		u         domain.User

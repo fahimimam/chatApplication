@@ -16,12 +16,16 @@ server, see `README.md` at the project root.
 - **Sign up** for an account with a username and password.
 - **Log in** to your existing account from any terminal that can reach
   the server.
-- **Open a direct conversation** with any other user by their username.
+- **Browse the directory** — see everyone registered, not just the ones
+  you happen to remember the username of.
+- **See who's online** in real time (right-hand sidebar of the TUI).
+- **Start a 1:1 chat** with anyone in the directory by selecting them
+  and pressing Enter.
 - **Send and receive** text messages in real time across multiple
   conversations.
-- **Browse history** — open a conversation and scroll back through
-  older messages.
-- **List all your conversations** and jump back into any of them.
+- **Get live notifications** when a message lands in a conversation
+  you're not currently viewing — the status bar flashes the sender's
+  name and you can press Enter on the conversation to jump in.
 - **Switch users** — log out and log in as someone else without
   restarting the client.
 
@@ -31,8 +35,6 @@ server, see `README.md` at the project root.
 - Editing or deleting messages you sent.
 - File or image attachments.
 - Typing indicators / read receipts.
-- Push notifications when a new message arrives while you're in
-  another conversation (refresh the list with `r`).
 - Encrypted transport — the server uses plain TCP. Don't run it on an
   untrusted network.
 
@@ -58,11 +60,10 @@ For a local server:
 go run ./cmd/chattui -addr 127.0.0.1:7171
 ```
 
-You should see a screen like:
+You should see a login screen:
 
 ```
 chatd
-
 mode: login
 press ctrl+r to switch between login and register
 
@@ -82,83 +83,107 @@ Type your username and a password, press Tab to move between fields,
 then press Enter. Pick a password you can remember — there's no
 "forgot password" flow yet.
 
-After registering, you can press Ctrl+R again to switch back to login
-mode (your account is now permanent).
+After registering, press Ctrl+R to switch back to login mode (your
+account is now permanent) and log in normally.
 
-### Step 3 — start chatting
+### Step 3 — the main screen
 
-Once you're logged in you'll see the conversation list:
-
-```
-chats — alice
-
-> direct   bob
-  direct   carol
-
-↑/↓: move   enter: open   n: new chat   r: refresh   ctrl+c: quit
-```
-
-- **↑ / ↓** (or `k` / `j`) move the selection.
-- **Enter** opens the highlighted conversation in the chat view.
-- **n** opens the inline "new chat" prompt.
-- **r** refreshes the list (useful if someone else just messaged you).
-
-### Step 4 — send your first message
-
-In the chat view, type into the bottom input box and press Enter. Your
-message appears immediately at the bottom of the conversation log,
-and the server sends it to the other participant.
+Once you're logged in you'll see a three-pane layout:
 
 ```
-chat — bob
-────────────────────────────────────────────────────────
-[14:02:11] alice  hello!
-[14:02:14] bob    hey, what's up?
-────────────────────────────────────────────────────────
-type a message and press Enter_
-
-enter: send   esc: back to chats   ctrl+c: quit
+┌─────────────────┬───────────────────────────────────┬──────────────────┐
+│ Conversations   │ Chat — bob                        │ People           │
+│                 │                                   │ ● alice  you     │
+│ > @ bob         │ [10:14] alice  hey!               │ ● bob            │
+│   # family      │ [10:15] bob    sup?               │ ○ carol          │
+│                 │                                   │                  │
+│                 │ type a message — enter to send    │ online: 2        │
+└─────────────────┴───────────────────────────────────┴──────────────────┘
+tab: switch pane · ↑/↓: move · enter: open · n: new chat · /: command · ?: help · ctrl+c: quit
 ```
 
-While you're typing:
+- **Left — Conversations.** Every chat you've ever had, most recent
+  first. The cursor highlights one row.
+- **Centre — Chat.** The currently open conversation's message log
+  (scrollable) plus an input line at the bottom.
+- **Right — People.** Everyone you've ever chatted with or who's in the
+  directory, with a green dot for online and a grey dot for offline.
+  Press **u** to filter the directory by a substring.
 
-- **Enter** sends the message.
-- **Esc** returns to the conversation list without sending.
-- **Ctrl+C** quits the client (your session on the server is closed
-  too).
+### Step 4 — keyboard cheatsheet
 
-### Step 5 — start a brand-new conversation
+The help bar at the bottom shows the most common shortcuts, but here
+is the full set:
 
-From the conversation list, press **n**. The chat view opens with no
-conversation loaded and the input prompt becomes:
+| Screen        | Key             | Action                                          |
+|---------------|-----------------|-------------------------------------------------|
+| Login         | `tab`           | Switch between username and password            |
+| Login         | `ctrl+r`        | Toggle between login and register mode          |
+| Login         | `enter`         | Submit                                          |
+| Login         | `ctrl+c` / `esc`| Quit                                            |
+| Main          | `tab`           | Cycle focus: conversations → chat → people      |
+| Main          | `shift+tab`     | Cycle focus in reverse                          |
+| Conversations | `↑` / `↓`       | Move selection                                  |
+| Conversations | `enter`         | Open the highlighted conversation               |
+| People        | `↑` / `↓`       | Move selection                                  |
+| People        | `enter`         | Open (or create) a chat with the selected user  |
+| Anywhere      | `n`             | New chat — type a username, press Enter         |
+| Anywhere      | `u`             | Filter people by substring                      |
+| Anywhere      | `r`             | Refresh everything (conversations + online)     |
+| Anywhere      | `?`             | Show the help overlay                           |
+| Anywhere      | `/`             | Enter a slash command (when not typing a msg)   |
+| Chat          | (type + enter)  | Send a message                                  |
+| Chat          | `esc`           | Back to conversation list (clears current chat) |
+| Anywhere      | `ctrl+c`        | Quit (always works)                             |
 
-```
-open: <username>
-```
+### Step 5 — send your first message
 
-Type the other person's username (e.g. `dave`) and press Enter. The
-client will:
+1. Make sure the **Chat** pane is focused (press `tab` until the
+   centre pane has the highlighted border).
+2. Type into the bottom input.
+3. Press **Enter**.
 
-1. Create the conversation on the server (or reuse one if you already
-   have a direct chat with that user).
-2. Switch to the chat view.
-3. Load any existing message history.
+Your message appears immediately at the bottom of the chat log, and
+the server fans it out to anyone else in the conversation. You'll see
+their replies arrive as live updates in the same pane.
 
-You can do the same from inside the chat view with the slash command:
+### Step 6 — start a brand-new conversation
 
-```
-/open dave
-```
+You have three options:
+
+1. From the **People** pane, press `↑`/`↓` to highlight someone, then
+   `enter`. If you don't have a chat with them yet, the server will
+   create one.
+2. From anywhere, press **`n`**, type the username, press Enter.
+3. From inside the chat input, type `/open <username>` and press
+   Enter.
+
+### Step 7 — live updates
+
+Once you've logged in, the TUI subscribes to server events. The right
+pane (People) updates its dots within a second of anyone joining or
+leaving. If a message arrives in a conversation you're not currently
+viewing, you'll see a notification in the status bar at the bottom
+and the conversation will get a marker in the list. Move the cursor
+to that conversation and press Enter to view it.
+
+### Step 8 — log out
+
+Type `/logout` in the chat input, or press `ctrl+c`. If you log back
+in as someone else, all your conversations will still be there.
 
 ---
 
-## Slash commands (inside the chat view)
+## Slash commands (inside the chat input)
 
-| Command     | What it does                                              |
-|-------------|-----------------------------------------------------------|
-| `/open <u>` | Opens (or reuses) a direct conversation with username `u`.|
-| `/quit`     | Logs out and exits the client.                            |
-| `/exit`     | Same as `/quit`.                                          |
+| Command        | What it does                                              |
+|----------------|-----------------------------------------------------------|
+| `/open <user>` | Opens (or creates) a direct conversation with `user`.     |
+| `/users`       | Refreshes the People pane.                                |
+| `/logout`      | Logs out and returns to the login screen.                 |
+| `/quit`        | Same as `ctrl+c` — logs out and exits.                    |
+| `/exit`        | Alias for `/quit`.                                        |
+| `/help` / `?`  | Show the help overlay.                                    |
 
 Anything else that starts with `/` is shown as `unknown command: …`.
 
@@ -166,49 +191,33 @@ Anything else that starts with `/` is shown as `unknown command: …`.
 
 ## Tips and gotchas
 
-- **Two people on the same machine can each run their own `chattui`**
-  with different logins. The server keeps them separate.
-- **Messages you send appear with your username** on the right side
-  of the chat log (purple), and incoming messages are on the left
-  (green) so you can tell them apart at a glance.
-- **The history view shows the most recent 100 messages.** Older ones
-  are stored on the server and will be paged in automatically in a
-  future version; for now, ask your admin to bump the limit if you
-  need more.
+- **You can be logged in multiple times.** The server tracks each open
+  connection, and your own messages get echoed back to your other
+  sessions so the UI stays consistent across windows.
+- **Messages you sent** appear with your username on the left side of
+  the chat log (purple), and incoming messages use the sender's
+  username (green).
+- **The history view shows the most recent 200 messages.** Older ones
+  are stored on the server and can be paged in by lowering the limit;
+  for now, ask your admin to bump the limit if you need more.
 - **If you forget your password**, ask the server admin — there's no
   self-serve reset yet.
-- **If the server is down**, the client will say so on startup and
-  exit. There's no automatic reconnect.
+- **If the server is down**, the client will display an error and the
+  status bar will say so. The chat input becomes a no-op; use
+  `ctrl+c` to quit and retry once the server is back.
 - **If your terminal looks garbled**, make sure your `TERM` is set to
   something colour-capable (e.g. `xterm-256color`, `screen-256color`,
   or `tmux-256color`). The TUI uses 256-colour ANSI sequences.
-
----
-
-## Quick reference — all keyboard shortcuts
-
-| Screen        | Key             | Action                                  |
-|---------------|-----------------|-----------------------------------------|
-| Login         | `tab`           | Switch between username and password    |
-| Login         | `ctrl+r`        | Toggle between login and register mode  |
-| Login         | `enter`         | Submit                                  |
-| Login         | `ctrl+c`        | Quit                                    |
-| Conversations | `↑` / `↓`       | Move selection                          |
-| Conversations | `enter`         | Open the highlighted conversation       |
-| Conversations | `n`             | New chat prompt                         |
-| Conversations | `r`             | Refresh list                            |
-| Conversations | `esc`           | Quit                                    |
-| Chat          | (type + enter)  | Send a message                          |
-| Chat          | `esc`           | Back to conversation list               |
-| Chat          | `ctrl+c`        | Quit                                    |
-| Anywhere      | `ctrl+c`        | Quit (always works)                     |
+- **People listed in the directory can be filtered.** Press `u` and
+  type any substring of their username — handy when there are many
+  users and you only remember a fragment.
 
 ---
 
 ## A worked example
 
-Two users, Alice and Bob, want to chat. They share a `chatd` server at
-`chat.example.com:7171`.
+Two users, Alice and Bob, want to chat. They share a `chatd` server
+at `chat.example.com:7171`.
 
 **Alice's terminal:**
 
@@ -218,15 +227,13 @@ $ chattui -addr chat.example.com:7171
 # Type "alice" / "hunter2", press Enter.
 # Press Ctrl+R to switch back to "login". Log in again.
 # (From now on she just logs in.)
-chats — alice
-(empty list — press n to start a new chat)
 
-> (press n, then type "bob" and Enter)
+# Right pane shows nobody (no users yet) or just her.
+# Press `n`, type "bob", press Enter — creates the conversation.
+# Type "hi bob!" in the chat input, press Enter.
+
 chat — bob
-────────────────────────────────────────────────────────
-(no messages yet — say hi!)
-────────────────────────────────────────────────────────
-hi bob! _
+[10:02] alice  hi bob!
 ```
 
 **Bob's terminal (after Alice's message):**
@@ -234,13 +241,11 @@ hi bob! _
 ```sh
 $ chattui -addr chat.example.com:7171
 # Log in as bob / hispassword.
-# He sees "alice" in the conversation list.
-# Press Enter to open the chat.
-chat — alice
-────────────────────────────────────────────────────────
-[14:02:11] alice  hi bob!
-────────────────────────────────────────────────────────
-hello alice! how's it going? _
+# People pane shows: ● alice, ● bob (you).
+# Conversations pane shows: > @ alice.
+# Press Enter to open it.
+# Type "hello alice! how's it going?" — Enter.
 ```
 
-That's the whole loop. Type, press Enter, get replies.
+That's the whole loop. The TUI stays in sync automatically; you don't
+have to refresh manually unless you want to.

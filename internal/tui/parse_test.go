@@ -77,3 +77,18 @@ func TestParseMessageMissingContent(t *testing.T) {
 		t.Fatalf("want content error, got %v", err)
 	}
 }
+
+func TestParseMessageWithExtraFields(t *testing.T) {
+	// Server now sends sender_name and conv on every message line.
+	line := `msg id=m1 sender=u1 sender_name=alice conv=c1 ts=100 content="hi"`
+	mr, err := ParseMessage(line)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mr.ID != "m1" || mr.Sender != "u1" || mr.SenderName != "alice" || mr.ConversationID != "c1" {
+		t.Errorf("bad: %+v", mr)
+	}
+	if mr.Content != "hi" {
+		t.Errorf("content: %q", mr.Content)
+	}
+}

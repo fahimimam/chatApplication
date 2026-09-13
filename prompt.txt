@@ -1,0 +1,1202 @@
+You are Claude Opus 4.6 acting as a Principal Software Engineer and Software Architect.
+
+I have an unfinished terminal-oriented chat application that I started previously but could not complete because of work pressure.
+
+I want to resume development now.
+
+The current application is intended to be a terminal-based chat client/server experience. I initially considered using tview, but I do NOT want to dictate the UI framework to you.
+
+Your job is to inspect the existing codebase and decide whether:
+
+- tview
+- Bubble Tea
+- another mature Go TUI framework
+- or even a simpler terminal approach
+
+is the best choice.
+
+Do not choose based on popularity alone.
+
+Choose based on the actual requirements, existing code, maintainability, ecosystem, and especially the future architecture described below.
+
+==================================================
+1. VERY IMPORTANT LONG-TERM ARCHITECTURE
+==================================================
+
+The terminal application is NOT the final product.
+
+Think of the terminal application as:
+
+    Legacy / First Client
+            |
+            v
+       Chat Backend
+            |
+            v
+       Domain / Data
+
+In the near future, I plan to build a full-fledged web chat application.
+
+That future application will likely use:
+
+    Browser
+       |
+    WebSocket
+       |
+    Chat Backend
+       |
+    Domain / Services
+       |
+    Database / Redis / etc.
+
+The terminal client may eventually become a legacy client.
+
+Therefore:
+
+DO NOT build the backend around the TUI.
+
+DO NOT let terminal-specific concepts leak into the domain/business layer.
+
+DO NOT design APIs that only make sense for a terminal UI.
+
+The terminal UI should be replaceable.
+
+Ideally the future architecture should allow:
+
+    Terminal Client
+         |
+         | HTTP / TCP / whatever current design requires
+         v
+    ┌──────────────────────┐
+    │    Chat Backend      │
+    ├──────────────────────┤
+    │ Domain               │
+    │ Application Services │
+    │ Repository Interfaces│
+    │ Authentication       │
+    │ Message Logic        │
+    │ Conversation Logic   │
+    └──────────────────────┘
+         |
+         +------ Database
+         |
+         +------ Redis/etc.
+
+Later:
+
+    Web Client
+       |
+    WebSocket
+       |
+       v
+    Same backend/domain/application logic
+
+The future web client should NOT require rewriting the core chat business logic.
+
+==================================================
+2. FIRST: UNDERSTAND WHAT ALREADY EXISTS
+==================================================
+
+Do NOT immediately start implementing features.
+
+First inspect the entire repository.
+
+Understand:
+
+- current project structure
+- Go version
+- go.mod dependencies
+- current application entry point
+- current server
+- current client
+- TUI implementation
+- networking layer
+- HTTP endpoints if any
+- authentication
+- user model
+- message model
+- conversation model
+- database
+- repository layer
+- services/use-cases
+- configuration
+- environment handling
+- tests
+- README/documentation
+- TODOs
+- unfinished implementations
+- commented-out code
+- known architectural problems
+
+Search the entire repository for:
+
+    TODO
+    FIXME
+    panic(
+    tview
+    bubbletea
+    websocket
+    WebSocket
+    message
+    chat
+    conversation
+    user
+    auth
+    repository
+    service
+    handler
+    HTTP
+
+Understand what is already working before deciding what to change.
+
+==================================================
+3. DO NOT ASSUME THE CURRENT ARCHITECTURE IS CORRECT
+==================================================
+
+The project was started earlier and may contain unfinished or experimental code.
+
+You are allowed to improve the architecture.
+
+But do NOT perform a giant rewrite just because the current implementation isn't perfect.
+
+Distinguish between:
+
+    MUST FIX
+    SHOULD FIX
+    NICE TO HAVE
+    LEAVE FOR LATER
+
+The primary goal is to get the application moving again while establishing a strong foundation for the future web client.
+
+==================================================
+4. CHOOSE THE TUI FRAMEWORK YOURSELF
+==================================================
+
+I initially thought about tview.
+
+You must evaluate whether tview is actually appropriate.
+
+Compare at least conceptually:
+
+    tview
+    Bubble Tea
+    alternatives
+
+Consider:
+
+- terminal rendering model
+- event handling
+- async updates
+- keyboard input
+- chat-style scrolling
+- message lists
+- input box
+- multiple views
+- networking
+- resize handling
+- testing
+- maintainability
+- ecosystem
+- ease of future development
+
+For a chat application, think about UI requirements such as:
+
+    ┌────────────────────────────────────────────────────┐
+    │ Conversation: Fahim                                │
+    ├────────────────────────────────────────────────────┤
+    │                                                    │
+    │ Fahim: Hey                                         │
+    │                                                    │
+    │ Alice: Hello!                                      │
+    │                                                    │
+    │ Fahim: How are you?                                │
+    │                                                    │
+    │                                                    │
+    ├────────────────────────────────────────────────────┤
+    │ > Type a message...                                │
+    └────────────────────────────────────────────────────┘
+
+Potential future screens:
+
+    Login
+    Conversation list
+    Chat view
+    Search
+    User list
+    Settings
+    Help
+
+Choose the framework that best supports the actual application.
+
+Document the decision.
+
+Do not use tview simply because I originally mentioned it.
+
+==================================================
+5. BACKEND MUST BE CLIENT-AGNOSTIC
+==================================================
+
+This is one of the most important requirements.
+
+The backend/domain layer must not know:
+
+    "this request came from a TUI"
+
+or:
+
+    "render this for terminal"
+
+The backend should deal with concepts such as:
+
+    User
+    Conversation
+    Message
+    Participant
+    Authentication
+    Presence
+    Read State
+    Delivery State
+
+The TUI is only a client.
+
+This should make it possible later to have:
+
+    CLI/TUI client
+    Web client
+    Mobile client
+
+without duplicating business logic.
+
+==================================================
+6. FUTURE WEBSOCKET ARCHITECTURE
+==================================================
+
+I plan to build the web version using WebSockets.
+
+DO NOT prematurely implement the complete WebSocket infrastructure unless the current project actually needs it.
+
+However, design the application so WebSockets can be introduced cleanly later.
+
+For example, avoid putting message processing directly inside:
+
+    HTTP handler
+    TUI event handler
+
+Instead:
+
+    Transport
+       ↓
+    Application Service
+       ↓
+    Domain
+       ↓
+    Repository
+
+The future WebSocket handler can then call the same application service.
+
+For example:
+
+    HTTP/TUI request
+          ↓
+    SendMessage()
+          ↓
+    Message Service
+          ↓
+    Repository
+
+Later:
+
+    WebSocket request
+          ↓
+    SendMessage()
+          ↓
+    Message Service
+          ↓
+    Repository
+
+The transport changes.
+
+The business logic does not.
+
+==================================================
+7. COMMUNICATION PROTOCOL
+==================================================
+
+Inspect the current networking architecture.
+
+If the terminal client communicates with a server using HTTP, preserve that unless there is a compelling architectural reason to change it.
+
+If the project currently uses another protocol, understand why.
+
+Do NOT introduce WebSockets simply because the future web application will use them.
+
+The terminal application should remain appropriate for its intended role.
+
+If a future protocol abstraction would be beneficial, design a clean interface rather than implementing unnecessary infrastructure now.
+
+==================================================
+8. DOMAIN MODEL
+==================================================
+
+Think carefully about the core domain.
+
+At minimum, likely concepts include:
+
+    User
+    Conversation
+    ConversationParticipant
+    Message
+
+Potential message fields:
+
+    ID
+    ConversationID
+    SenderID
+    Content
+    CreatedAt
+    UpdatedAt
+
+Potential future fields:
+
+    EditedAt
+    DeletedAt
+    ReplyToMessageID
+    MessageType
+    Metadata
+
+Do not implement every future feature.
+
+But avoid designing the current schema in a way that makes obvious future features impossible.
+
+==================================================
+9. CONVERSATIONS
+==================================================
+
+Do not model the entire application around:
+
+    User A -> User B message
+
+unless the existing requirements genuinely call for that.
+
+A proper conversation abstraction will make the future application much easier.
+
+Think:
+
+    Conversation
+       |
+       +-- Participants
+       |
+       +-- Messages
+
+For a direct chat:
+
+    Fahim <-> Alice
+
+For future group chat:
+
+    Fahim
+    Alice
+    Bob
+
+The current implementation does NOT necessarily need full group chat.
+
+But the domain model should not make group conversations impossible.
+
+==================================================
+10. MESSAGE FLOW
+==================================================
+
+The basic flow should conceptually be:
+
+    Client
+      ↓
+    Transport
+      ↓
+    Handler / Controller
+      ↓
+    Application Service
+      ↓
+    Domain rules
+      ↓
+    Repository
+      ↓
+    Database
+
+Do not put database queries directly inside the TUI.
+
+Do not put business rules inside terminal event handlers.
+
+Do not make the TUI responsible for authentication logic.
+
+==================================================
+11. REPOSITORY / SERVICE ARCHITECTURE
+==================================================
+
+Choose an appropriate architecture based on the current project.
+
+If a Repository + Service/Application layer makes sense, use it.
+
+For example:
+
+    internal/
+        domain/
+        application/
+        repository/
+        infrastructure/
+        transport/
+            http/
+        tui/
+
+But this is an example, NOT a mandatory folder structure.
+
+Do not create dozens of empty abstractions.
+
+Use interfaces where they provide actual value.
+
+The key requirement is separation between:
+
+    Domain
+    Application/business logic
+    Infrastructure
+    Transport
+    TUI
+
+==================================================
+12. DATABASE
+==================================================
+
+Inspect the current database implementation.
+
+Determine:
+
+- database type
+- ORM/query builder/raw SQL
+- migration system
+- connection management
+- transaction handling
+- indexes
+- constraints
+
+Follow the project's existing technology unless there is a strong reason to change it.
+
+For chat, think about indexes for queries such as:
+
+    messages by conversation
+    messages ordered by creation time
+    participants by conversation
+    conversations by user
+
+Do not prematurely optimize.
+
+But avoid obvious database mistakes.
+
+==================================================
+13. CHAT MESSAGE ORDERING
+==================================================
+
+Messages must have deterministic ordering.
+
+Think carefully about:
+
+    created_at
+    message ID
+    pagination
+    concurrent messages
+
+Do not rely on database row order.
+
+For example, a query should conceptually support:
+
+    conversation_id
+    ORDER BY created_at, id
+
+if appropriate.
+
+==================================================
+14. PAGINATION
+==================================================
+
+A chat history can become very large.
+
+Do not design the system assuming:
+
+    SELECT * FROM messages
+
+forever.
+
+Introduce a reasonable pagination strategy if the current implementation does not already have one.
+
+For the TUI, this is especially important because eventually the user may scroll through thousands of messages.
+
+Use a sensible strategy such as cursor-based pagination if appropriate.
+
+Do not over-engineer it.
+
+==================================================
+15. TUI STATE MANAGEMENT
+==================================================
+
+The TUI must be able to handle asynchronous events.
+
+For example:
+
+    User is viewing chat with Alice.
+
+    Alice sends a message.
+
+    The UI should eventually be able to receive:
+
+        New message event
+
+without tightly coupling the message transport to the rendering code.
+
+Keep networking and UI state separated.
+
+Conceptually:
+
+    Network Event
+         ↓
+    Application State
+         ↓
+    TUI renders state
+
+Do not block the UI thread on network/database operations.
+
+==================================================
+16. FUTURE REALTIME SUPPORT
+==================================================
+
+The current terminal client does not necessarily need full realtime WebSockets.
+
+But architect the message/event layer so realtime can be introduced later.
+
+A useful conceptual boundary could be:
+
+    MessageService
+          |
+          +--> Repository
+          |
+          +--> Event/Notification mechanism
+
+Later:
+
+    Event
+      ↓
+    WebSocket Hub
+      ↓
+    Browser clients
+
+Again:
+
+DO NOT implement a full distributed event architecture now unless justified.
+
+==================================================
+17. AUTHENTICATION
+==================================================
+
+Inspect the current authentication implementation.
+
+Keep authentication independent of the TUI.
+
+The terminal UI should call an authentication service/API rather than implementing credential validation itself.
+
+Think about future web authentication.
+
+Do not hard-code credentials.
+
+Do not store passwords unnecessarily.
+
+Do not log sensitive credentials.
+
+==================================================
+18. ERROR HANDLING
+==================================================
+
+Design errors so that transport/UI layers can present them appropriately.
+
+For example:
+
+    domain/application error:
+        ErrConversationNotFound
+
+could become:
+
+    TUI:
+        "Conversation not found"
+
+and later:
+
+    Web:
+        HTTP 404 / JSON error
+
+Do not make domain errors dependent on HTTP status codes or terminal strings.
+
+==================================================
+19. CONFIGURATION
+==================================================
+
+Inspect the existing configuration approach.
+
+The terminal client should be able to configure things such as:
+
+    server address
+    port
+    environment
+    username/session information
+
+without hard-coding them.
+
+Keep configuration simple.
+
+Do not build an elaborate configuration framework unless the project already uses one.
+
+==================================================
+20. LOGGING
+==================================================
+
+The TUI and normal application logs can conflict.
+
+If logging exists, make sure it does not corrupt the terminal interface.
+
+Consider:
+
+    file logging
+    structured logging
+    disabled console logging while TUI is active
+
+depending on the existing architecture.
+
+Do not print random debug messages over the TUI.
+
+==================================================
+21. TESTING
+==================================================
+
+Testing should focus on business logic rather than screenshot-testing the terminal.
+
+Prioritize tests for:
+
+    authentication
+    conversations
+    participants
+    sending messages
+    retrieving messages
+    authorization
+    pagination
+    repository behavior
+
+Then add appropriate TUI tests where practical.
+
+The core domain/application layer should be testable without starting the TUI.
+
+==================================================
+22. INCREMENTAL DEVELOPMENT — VERY IMPORTANT
+==================================================
+
+DO NOT make a massive change in one go.
+
+Work in small, logical increments.
+
+Each increment should:
+
+1. Have a clear objective.
+2. Make a small set of related changes.
+3. Compile.
+4. Pass tests.
+5. Be reviewable independently.
+6. Leave the repository in a working state.
+
+After each meaningful increment, create a Git commit.
+
+Use meaningful commit messages such as:
+
+    feat: establish chat domain model
+
+    feat: add conversation repository
+
+    feat: implement message service
+
+    refactor: isolate tui from application layer
+
+    feat: implement conversation list
+
+    feat: implement terminal chat view
+
+    test: add message service coverage
+
+Avoid giant commits such as:
+
+    "implement chat app"
+
+==================================================
+23. COMMIT STRATEGY
+==================================================
+
+Before making changes, inspect the current Git state.
+
+Do NOT overwrite or discard existing user work.
+
+Do NOT run destructive Git commands.
+
+Do not reset files unless explicitly necessary.
+
+Keep unrelated modifications untouched.
+
+Make commits only for your own changes.
+
+After each logical milestone:
+
+    git status
+    git diff
+    tests
+    build
+    git commit
+
+The commit history should tell the story of how the application was rebuilt.
+
+==================================================
+24. DEVELOPMENT PHASES
+==================================================
+
+Use roughly this development order.
+
+PHASE 0 — DISCOVERY
+
+Inspect everything.
+
+Determine:
+
+- what currently works
+- what doesn't
+- what is unfinished
+- architecture
+- dependencies
+- database
+- networking
+- TUI
+
+Then provide a concise assessment.
+
+Do not start a rewrite.
+
+--------------------------------------------
+
+PHASE 1 — ARCHITECTURE FOUNDATION
+
+Only make changes that are necessary to establish clean boundaries.
+
+Ensure the future web client can reuse the core application logic.
+
+Do not over-refactor.
+
+Commit.
+
+--------------------------------------------
+
+PHASE 2 — DOMAIN / APPLICATION LOGIC
+
+Establish or clean up:
+
+    User
+    Conversation
+    Participant
+    Message
+
+and the necessary application services.
+
+Commit each logical unit.
+
+--------------------------------------------
+
+PHASE 3 — PERSISTENCE
+
+Implement/clean up repositories and migrations.
+
+Add appropriate indexes and constraints.
+
+Add tests.
+
+Commit.
+
+--------------------------------------------
+
+PHASE 4 — TRANSPORT/API
+
+Make sure the terminal client has a clean way to communicate with the backend.
+
+Keep transport independent of domain logic.
+
+Commit.
+
+--------------------------------------------
+
+PHASE 5 — TUI
+
+Now decide and implement the chosen TUI framework.
+
+Start with:
+
+    Login
+    Conversation list
+    Chat view
+    Message input
+
+Then improve UX incrementally.
+
+Commit each meaningful feature.
+
+--------------------------------------------
+
+PHASE 6 — POLISH
+
+Add:
+
+    loading states
+    error states
+    reconnect behavior
+    scrolling
+    pagination
+    keyboard shortcuts
+    terminal resizing
+    unread indicators
+
+only where appropriate.
+
+Commit logically.
+
+--------------------------------------------
+
+PHASE 7 — DOCUMENTATION
+
+Update README/documentation.
+
+Explain:
+
+- architecture
+- how to run server
+- how to run terminal client
+- configuration
+- database setup
+- development workflow
+- future WebSocket/web-client direction
+
+Commit.
+
+==================================================
+25. DO NOT PREMATURELY BUILD THE FUTURE WEB APP
+==================================================
+
+The future web chat application is a design constraint, NOT the current implementation target.
+
+Do NOT build:
+
+- React frontend
+- WebSocket server
+- browser UI
+- mobile client
+- distributed message broker
+- Kubernetes deployment
+- microservices
+
+unless the existing repository already contains them and they are necessary.
+
+We are building the terminal application correctly so that these can be added later.
+
+==================================================
+26. DO NOT OVER-ENGINEER
+==================================================
+
+Avoid introducing things such as:
+
+    Kafka
+    RabbitMQ
+    NATS
+    event sourcing
+    CQRS
+    microservices
+    distributed locks
+    complex dependency injection
+    elaborate plugin systems
+
+unless the actual existing requirements justify them.
+
+A well-structured modular monolith is preferable.
+
+The likely target architecture is:
+
+    Modular Monolith
+
+with:
+
+    Domain
+    Application
+    Infrastructure
+    Transport
+    TUI
+
+This should be enough for the current application and future web client.
+
+==================================================
+27. LEGACY TERMINAL CLIENT
+==================================================
+
+Treat the terminal application as a first-class client today, but architecturally disposable tomorrow.
+
+Meaning:
+
+The terminal UI should be replaceable without rewriting:
+
+    user logic
+    conversation logic
+    message logic
+    authorization
+    persistence
+
+This is one of the most important architectural goals.
+
+==================================================
+28. FUTURE MIGRATION PATH
+==================================================
+
+At the end of your architectural assessment, explain how the project could evolve from:
+
+    Current:
+
+    TUI
+      ↓
+    Chat Backend
+
+to:
+
+    Future:
+
+    ┌───────────────┐
+    │ Web Browser   │
+    │ WebSocket     │
+    └───────┬───────┘
+            │
+    ┌───────▼──────────────┐
+    │     Chat Backend     │
+    │                      │
+    │ Auth                 │
+    │ Conversations        │
+    │ Messages             │
+    │ Application Services │
+    └────────┬─────────────┘
+             │
+       ┌─────▼─────┐
+       │ Database   │
+       └───────────┘
+
+and potentially:
+
+    TUI
+      │
+      └──────> same backend
+
+The architecture should make this evolution natural.
+
+==================================================
+29. PERFORMANCE
+==================================================
+
+Do not optimize prematurely.
+
+But avoid obvious problems such as:
+
+- loading entire chat history
+- N+1 database queries
+- blocking TUI rendering
+- repeatedly reconnecting unnecessarily
+- unbounded in-memory message lists
+- unnecessary database queries on every keypress
+
+Use sensible defaults.
+
+==================================================
+30. SECURITY
+==================================================
+
+Even though this is an internal/learning project, treat it seriously.
+
+Review:
+
+- authentication
+- authorization
+- conversation membership
+- message access
+- input validation
+- SQL injection
+- credential handling
+- session handling
+- transport security
+- logging
+
+A user must never be able to access a conversation merely by changing a conversation ID.
+
+Authorization belongs in the backend/application layer, not just the TUI.
+
+==================================================
+31. DEFINITION OF DONE
+==================================================
+
+Do not consider the project complete simply because the TUI launches.
+
+The application should have a coherent architecture where:
+
+    TUI
+      ↓
+    Transport
+      ↓
+    Application
+      ↓
+    Domain
+      ↓
+    Repository
+      ↓
+    Database
+
+and the TUI can eventually be replaced by:
+
+    WebSocket/Web client
+      ↓
+    Same Application
+      ↓
+    Same Domain
+      ↓
+    Same Repository
+
+The terminal client should provide a usable chat experience.
+
+At minimum, the finished terminal application should support the core functionality already intended by the existing project, such as:
+
+- authentication
+- seeing conversations
+- opening a conversation
+- reading messages
+- sending messages
+- navigating chat history
+- handling errors
+- cleanly exiting
+
+Do not invent a large feature set beyond the existing project's intended scope.
+
+==================================================
+32. IMPORTANT WORKING STYLE
+==================================================
+
+Take your time.
+
+Do not rush into implementation.
+
+Do not ask me for approval after every tiny decision.
+
+Use your engineering judgment.
+
+However, if you encounter an ambiguity that could fundamentally change the architecture or cause data loss, stop and explain the issue before proceeding.
+
+Otherwise, make the most sensible decision, document it, and continue.
+
+Prefer:
+
+    inspect → understand → plan → implement → test → commit
+
+over:
+
+    guess → rewrite → hope it works
+
+==================================================
+33. FIRST TASK
+==================================================
+
+For your FIRST step, DO NOT implement anything.
+
+Inspect the entire repository and produce:
+
+### A. Current Architecture
+
+Explain:
+
+    client
+    server
+    transport
+    TUI
+    domain
+    services
+    repositories
+    database
+    authentication
+
+### B. Current State
+
+Identify:
+
+    working
+    partially implemented
+    broken
+    missing
+
+### C. Architectural Problems
+
+Identify only meaningful issues that affect:
+
+- maintainability
+- correctness
+- security
+- future web client
+- ability to finish the terminal application
+
+### D. TUI Framework Recommendation
+
+Compare the existing implementation against:
+
+    tview
+    Bubble Tea
+    alternatives
+
+Then recommend ONE.
+
+Explain why.
+
+### E. Target Architecture
+
+Show the proposed architecture in a simple diagram.
+
+### F. Incremental Roadmap
+
+Break the work into small implementation milestones.
+
+For each milestone specify:
+
+    Goal
+    Files/components likely affected
+    Tests
+    Expected commit message
+
+DO NOT make code changes during this first phase.
+
+After presenting this assessment and roadmap, begin implementing Phase 1 using the incremental commit strategy above.
+
+==================================================
+FINAL PRINCIPLE
+==================================================
+
+Build this as a serious Go chat application, not as a terminal toy.
+
+But also do not over-engineer it.
+
+The most important architectural principle is:
+
+    THE TUI IS A CLIENT, NOT THE APPLICATION.
+
+The business/domain/application layer must remain independent from the terminal UI so that the future WebSocket-based web application can reuse it.
+
+Make small changes.
+
+Test frequently.
+
+Commit frequently.
+
+Preserve existing work.
+
+And always prefer a clean evolutionary path over a giant rewrite.

@@ -15,6 +15,10 @@ type UserRepository interface {
 	Create(ctx context.Context, u domain.User) error
 	ByID(ctx context.Context, id domain.UserID) (domain.User, error)
 	ByUsername(ctx context.Context, username string) (domain.User, error)
+	// ListAll returns every user known to the system, sorted by username.
+	// Used by the directory command so clients can pick a username to chat
+	// with without having to remember one.
+	ListAll(ctx context.Context) ([]domain.User, error)
 }
 
 // ConversationRepository persists conversations and their membership.
